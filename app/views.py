@@ -1,64 +1,79 @@
 """
-Flask Documentation:     https://flask.palletsprojects.com/
-Jinja2 Documentation:    https://jinja.palletsprojects.com/
-Werkzeug Documentation:  https://werkzeug.palletsprojects.com/
+Flask Documentation:     http://flask.pocoo.org/docs/
+Jinja2 Documentation:    http://jinja.pocoo.org/2/documentation/
+Werkzeug Documentation:  http://werkzeug.pocoo.org/documentation/
 This file creates your application.
 """
 
-from app import app
-from flask import render_template, request, jsonify, send_file
 import os
-from app.forms import UploadForm
-from flask_wtf.csrf import generate_csrf
+from app import app
+from flask import render_template, request, jsonify
 from werkzeug.utils import secure_filename
-
+from app.forms import UploadForm
 
 ###
 # Routing for your application.
 ###
 
-@app.route('/')
-def index():
-    return jsonify(message="This is the beginning of our API")
 
+# Please create all new routes and view functions above this route.
+# This route is now our catch all route for our VueJS single page
+# application.
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def index(path):
+    """
+    Because we use HTML5 history mode in vue-router we need to configure our
+    web server to redirect all routes to index.html. Hence the additional route
+    "/<path:path".
+    Also we will render the initial webpage and then let VueJS take control.
+    """
+    return render_template('index.html')
 
-@app.route('/api/upload', methods=['POST'])
+@app.route("/api/upload", methods=['POST'])
 def upload():
     form = UploadForm()
-    if request.method == 'POST' and form.validate_on_submit():
-        description = request.form['description']
-        photo = request.files['photo']
-        filename = secure_filename(photo.filename)
-        photo.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-        return jsonify({'message': "File Upload Successful", 'description': description, 'filename': filename }),200 
+    if form.validate_on_submit():
+        photo = form.photo.data
+        description = form.description.data
+
+        # Save the photo
+        photo_path = secure_filename(photo.filename)
+        path_joined = os.path.join(app.config['UPLOAD_FOLDER'], photo_path)
+        photo.save(path_joined)
+
+
+        response_obj = {
+            "message":"File Upload Successful",
+            "filename":photo_path,
+            "description": description,
+        }
+        return jsonify(response_obj)
     else:
-        return jsonify({'errors': form_errors(form)}), 400
-
-
-@app.route('/api/csrf-token', methods=['GET'])
-def get_csrf():
-    return jsonify({'csrf_token': generate_csrf()})
-
-###
-# The functions below should be applicable to all Flask apps.
-###
+        error_obj = {
+            "errors":form_errors(form)
+        }
+        return jsonify(error_obj)
 
 # Here we define a function to collect form errors from Flask-WTF
 # which we can later use
-
-
 def form_errors(form):
     error_messages = []
     """Collects form errors"""
     for field, errors in form.errors.items():
         for error in errors:
             message = u"Error in the %s field - %s" % (
-                getattr(form, field).label.text,
-                error
-            )
+                    getattr(form, field).label.text,
+                    error
+                )
             error_messages.append(message)
 
     return error_messages
+
+
+###
+# The functions below should be applicable to all Flask apps.
+###
 
 
 @app.route('/<file_name>.txt')
